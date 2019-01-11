@@ -9,7 +9,7 @@ Google API.
 
 """
 
-import requests
+from aiohttp import ClientSession
 
 from .utils import finditem
 from .utils import extract_id_from_url
@@ -39,7 +39,7 @@ class Client(object):
     """
     def __init__(self, auth, session=None):
         self.auth = auth
-        self.session = session or requests.Session()
+        self.session = session or ClientSession()
 
     def login(self):
         """Authorize client."""
@@ -52,7 +52,7 @@ class Client(object):
             'Authorization': 'Bearer %s' % self.auth.token
         })
 
-    def request(
+    async def request(
             self,
             method,
             endpoint,
@@ -62,7 +62,8 @@ class Client(object):
             files=None,
             headers=None):
 
-        response = getattr(self.session, method)(
+        response = await self.session.request(
+            method,
             endpoint,
             json=json,
             params=params,
@@ -71,12 +72,16 @@ class Client(object):
             headers=headers
         )
 
-        if response.ok:
+        if response.reason == 'OK':
             return response
         else:
             raise APIError(response)
 
-    def list_spreadsheet_files(self):
+    async def request_json(self, method, endpoint, **kwargs):
+        r = await self.request(method, endpoint, **kwargs)
+        return await r.json()
+
+    async def list_spreadsheet_files(self):
         files = []
         page_token = ''
         url = "https://www.googleapis.com/drive/v3/files"
@@ -91,7 +96,7 @@ class Client(object):
             if page_token:
                 params['pageToken'] = page_token
 
-            res = self.request('get', url, params=params).json()
+            res = await self.request_json('get', url, params=params)
             files.extend(res['files'])
             page_token = res.get('nextPageToken', None)
 
@@ -159,7 +164,7 @@ class Client(object):
         """
         return self.open_by_key(extract_id_from_url(url))
 
-    def openall(self, title=None):
+    async def openall(self, title=None):
         """Opens all available spreadsheets.
 
         :param title: (optional) If specified can be used to filter
@@ -169,14 +174,14 @@ class Client(object):
         :returns: a list of :class:`~gspread.models.Spreadsheet` instances.
 
         """
-        spreadsheet_files = self.list_spreadsheet_files()
+        spreadsheet_files = await self.list_spreadsheet_files()
 
         return [
             Spreadsheet(self, dict(title=x['name'], **x))
             for x in spreadsheet_files
         ]
 
-    def create(self, title):
+    async def create(self, title):
         """Creates a new spreadsheet.
 
         :param title: A title of a new spreadsheet.
@@ -204,15 +209,15 @@ class Client(object):
             'title': title,
             'mimeType': 'application/vnd.google-apps.spreadsheet'
         }
-        r = self.request(
+        r = await self.request_json(
             'post',
             DRIVE_FILES_API_V2_URL,
             json=payload
         )
-        spreadsheet_id = r.json()['id']
+        spreadsheet_id = r['id']
         return self.open_by_key(spreadsheet_id)
 
-    def copy(self, file_id, title=None, copy_permissions=False):
+    async def copy(self, file_id, title=None, copy_permissions=False):
         """Copies a spreadsheet.
 
         :param file_id: A key of a spreadsheet to copy.
@@ -255,12 +260,12 @@ class Client(object):
             'title': title,
             'mimeType': 'application/vnd.google-apps.spreadsheet'
         }
-        r = self.request(
+        r = await self.request_json(
             'post',
             url,
             json=payload
         )
-        spreadsheet_id = r.json()['id']
+        spreadsheet_id = r['id']
 
         new_spreadsheet = self.open_by_key(spreadsheet_id)
 
@@ -283,7 +288,7 @@ class Client(object):
 
         return new_spreadsheet
 
-    def del_spreadsheet(self, file_id):
+    async def del_spreadsheet(self, file_id):
         """Deletes a spreadsheet.
 
         :param file_id: a spreadsheet ID (aka file ID.)
@@ -294,9 +299,9 @@ class Client(object):
             file_id
         )
 
-        self.request('delete', url)
+        await self.request('delete', url)
 
-    def import_csv(self, file_id, data):
+    async def import_csv(self, file_id, data):
         """Imports data into the first page of the spreadsheet.
 
         :param str data: A CSV string of data.
@@ -319,7 +324,7 @@ class Client(object):
         headers = {'Content-Type': 'text/csv'}
         url = '{0}/{1}'.format(DRIVE_FILES_UPLOAD_API_V2_URL, file_id)
 
-        self.request(
+        await self.request(
             'put',
             url,
             data=data,
@@ -330,7 +335,7 @@ class Client(object):
             headers=headers
         )
 
-    def list_permissions(self, file_id):
+    async def list_permissions(self, file_id):
         """Retrieve a list of permissions for a file.
 
         :param file_id: a spreadsheet ID (aka file ID.)
@@ -338,11 +343,11 @@ class Client(object):
         """
         url = '{0}/{1}/permissions'.format(DRIVE_FILES_API_V2_URL, file_id)
 
-        r = self.request('get', url)
+        r = await self.request_json('get', url)
 
-        return r.json()['items']
+        return r['items']
 
-    def insert_permission(
+    async def insert_permission(
         self,
         file_id,
         value,
@@ -411,14 +416,14 @@ class Client(object):
             'emailMessage': email_message
         }
 
-        self.request(
+        await self.request(
             'post',
             url,
             json=payload,
             params=params
         )
 
-    def remove_permission(self, file_id, permission_id):
+    async def remove_permission(self, file_id, permission_id):
         """Deletes a permission from a file.
 
         :param file_id: a spreadsheet ID (aka file ID.)
@@ -432,4 +437,4 @@ class Client(object):
             permission_id
         )
 
-        self.request('delete', url)
+        await self.request('delete', url)

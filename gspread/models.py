@@ -84,7 +84,7 @@ class Spreadsheet(object):
                                   repr(self.title),
                                   self.id)
 
-    def batch_update(self, body):
+    async def batch_update(self, body):
         """Lower-level method that directly calls `spreadsheets.batchUpdate <https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/batchUpdate>`_.
 
         :param dict body: `Request body <https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/batchUpdate#request-body>`_.
@@ -94,15 +94,13 @@ class Spreadsheet(object):
         .. versionadded:: 3.0
 
         """
-        r = self.client.request(
+        return await self.client.request_json(
             'post',
             SPREADSHEET_BATCH_UPDATE_URL % self.id,
             json=body
         )
 
-        return r.json()
-
-    def values_append(self, range, params, body):
+    async def values_append(self, range, params, body):
         """Lower-level method that directly calls `spreadsheets.values.append <https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append>`_.
 
         :param str range: The `A1 notation <https://developers.google.com/sheets/api/guides/concepts#a1_notation>`_
@@ -116,10 +114,9 @@ class Spreadsheet(object):
 
         """
         url = SPREADSHEET_VALUES_APPEND_URL % (self.id, quote(range))
-        r = self.client.request('post', url, params=params, json=body)
-        return r.json()
+        return await self.client.request_json('post', url, params=params, json=body)
 
-    def values_clear(self, range):
+    async def values_clear(self, range):
         """Lower-level method that directly calls `spreadsheets.values.clear <https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/clear>`_.
 
         :param str range: The `A1 notation <https://developers.google.com/sheets/api/guides/concepts#a1_notation>`_ of the values to clear.
@@ -130,10 +127,9 @@ class Spreadsheet(object):
 
         """
         url = SPREADSHEET_VALUES_CLEAR_URL % (self.id, quote(range))
-        r = self.client.request('post', url)
-        return r.json()
+        return await self.client.request_json('post', url)
 
-    def values_get(self, range, params=None):
+    async def values_get(self, range, params=None):
         """Lower-level method that directly calls `spreadsheets.values.get <https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get>`_.
 
         :param str range: The `A1 notation <https://developers.google.com/sheets/api/guides/concepts#a1_notation>`_ of the values to retrieve.
@@ -145,10 +141,9 @@ class Spreadsheet(object):
 
         """
         url = SPREADSHEET_VALUES_URL % (self.id, quote(range))
-        r = self.client.request('get', url, params=params)
-        return r.json()
+        return await self.client.request_json('get', url, params=params)
 
-    def values_update(self, range, params=None, body=None):
+    async def values_update(self, range, params=None, body=None):
         """Lower-level method that directly calls `spreadsheets.values.update <https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update>`_.
 
         :param str range: The `A1 notation <https://developers.google.com/sheets/api/guides/concepts#a1_notation>`_ of the values to update.
@@ -173,17 +168,14 @@ class Spreadsheet(object):
 
         """
         url = SPREADSHEET_VALUES_URL % (self.id, quote(range))
-        r = self.client.request('put', url, params=params, json=body)
-        return r.json()
+        return await self.client.request_json('put', url, params=params, json=body)
 
-    def fetch_sheet_metadata(self):
+    async def fetch_sheet_metadata(self):
         params = {'includeGridData': 'false'}
 
         url = SPREADSHEET_URL % self.id
 
-        r = self.client.request('get', url, params=params)
-
-        return r.json()
+        return await self.client.request_json('get', url, params=params)
 
     def get_worksheet(self, index):
         """Returns a worksheet with specified `index`.
@@ -464,7 +456,7 @@ class Worksheet(object):
         """Number of columns."""
         return self._properties['gridProperties']['columnCount']
 
-    def acell(self, label, value_render_option='FORMATTED_VALUE'):
+    async def acell(self, label, value_render_option='FORMATTED_VALUE'):
         """Returns an instance of a :class:`gspread.models.Cell`.
 
         :param label: Cell label in A1 notation
@@ -484,12 +476,12 @@ class Worksheet(object):
 
         """
 
-        return self.cell(
+        return await self.cell(
             *(a1_to_rowcol(label)),
             value_render_option=value_render_option
         )
 
-    def cell(self, row, col, value_render_option='FORMATTED_VALUE'):
+    async def cell(self, row, col, value_render_option='FORMATTED_VALUE'):
         """Returns an instance of a :class:`gspread.models.Cell` located at
         `row` and `col` column.
 
@@ -512,7 +504,7 @@ class Worksheet(object):
         """
 
         range_label = '%s!%s' % (self.title, rowcol_to_a1(row, col))
-        data = self.spreadsheet.values_get(
+        data = await self.spreadsheet.values_get(
             range_label,
             params={'valueRenderOption': value_render_option}
         )
@@ -525,7 +517,7 @@ class Worksheet(object):
         return Cell(row, col, value)
 
     @cast_to_a1_notation
-    def range(self, name):
+    async def range(self, name):
         """Returns a list of :class:`Cell` objects from a specified range.
 
         :param name: A string with range value in A1 notation, e.g. 'A1:A5'.
@@ -557,7 +549,7 @@ class Worksheet(object):
 
         range_label = '%s!%s' % (self.title, name)
 
-        data = self.spreadsheet.values_get(range_label)
+        data = await self.spreadsheet.values_get(range_label)
 
         start, end = name.split(':')
         (row_offset, column_offset) = a1_to_rowcol(start)
@@ -577,7 +569,7 @@ class Worksheet(object):
             for j, value in enumerate(row)
         ]
 
-    def get_all_values(self):
+    async def get_all_values(self):
         """Returns a list of lists containing all cells' values as strings.
 
         .. note::
@@ -585,14 +577,14 @@ class Worksheet(object):
             Empty trailing rows and columns will not be included.
         """
 
-        data = self.spreadsheet.values_get(self.title)
+        data = await self.spreadsheet.values_get(self.title)
 
         try:
             return fill_gaps(data['values'])
         except KeyError:
             return []
 
-    def get_all_records(
+    async def get_all_records(
         self,
         empty2zero=False,
         head=1,
@@ -625,7 +617,7 @@ class Worksheet(object):
 
         idx = head - 1
 
-        data = self.get_all_values()
+        data = await self.get_all_values()
 
         # Return an empty list if the sheet doesn't have enough rows
         if len(data) <= idx:
@@ -644,7 +636,7 @@ class Worksheet(object):
 
         return [dict(zip(keys, row)) for row in values]
 
-    def row_values(self, row, value_render_option='FORMATTED_VALUE'):
+    async def row_values(self, row, value_render_option='FORMATTED_VALUE'):
         """Returns a list of all values in a `row`.
 
         Empty cells in this list will be rendered as :const:`None`.
@@ -662,7 +654,7 @@ class Worksheet(object):
 
         range_label = '%s!A%s:%s' % (self.title, row, row)
 
-        data = self.spreadsheet.values_get(
+        data = await self.spreadsheet.values_get(
             range_label,
             params={'valueRenderOption': value_render_option}
         )
@@ -672,7 +664,7 @@ class Worksheet(object):
         except KeyError:
             return []
 
-    def col_values(self, col, value_render_option='FORMATTED_VALUE'):
+    async def col_values(self, col, value_render_option='FORMATTED_VALUE'):
         """Returns a list of all values in column `col`.
 
         Empty cells in this list will be rendered as :const:`None`.
@@ -691,7 +683,7 @@ class Worksheet(object):
         start_label = rowcol_to_a1(1, col)
         range_label = '%s!%s:%s' % (self.title, start_label, start_label[:-1])
 
-        data = self.spreadsheet.values_get(
+        data = await self.spreadsheet.values_get(
             range_label,
             params={
                 'valueRenderOption': value_render_option,
@@ -704,7 +696,7 @@ class Worksheet(object):
         except KeyError:
             return []
 
-    def update_acell(self, label, value):
+    async def update_acell(self, label, value):
         """Updates the value of a cell.
 
         :param label: Cell label in A1 notation.
@@ -717,9 +709,9 @@ class Worksheet(object):
             worksheet.update_acell('A1', '42')
 
         """
-        return self.update_cell(*(a1_to_rowcol(label)), value=value)
+        return await self.update_cell(*(a1_to_rowcol(label)), value=value)
 
-    def update_cell(self, row, col, value):
+    async def update_cell(self, row, col, value):
         """Updates the value of a cell.
 
         :param row: Row number.
@@ -735,7 +727,7 @@ class Worksheet(object):
         """
         range_label = '%s!%s' % (self.title, rowcol_to_a1(row, col))
 
-        data = self.spreadsheet.values_update(
+        data = await self.spreadsheet.values_update(
             range_label,
             params={
                 'valueInputOption': 'USER_ENTERED'
@@ -747,7 +739,7 @@ class Worksheet(object):
 
         return data
 
-    def update_cells(self, cell_list, value_input_option='RAW'):
+    async def update_cells(self, cell_list, value_input_option='RAW'):
         """Updates many cells at once.
 
         :param cell_list: List of :class:`Cell` objects to update.
@@ -778,7 +770,7 @@ class Worksheet(object):
 
         range_label = '%s!%s:%s' % (self.title, start, end)
 
-        data = self.spreadsheet.values_update(
+        data = await self.spreadsheet.values_update(
             range_label,
             params={
                 'valueInputOption': value_input_option
@@ -790,7 +782,7 @@ class Worksheet(object):
 
         return data
 
-    def resize(self, rows=None, cols=None):
+    async def resize(self, rows=None, cols=None):
         """Resizes the worksheet. Specify one of ``rows`` or ``cols``.
 
         :param rows: (optional) New number of rows.
@@ -825,9 +817,9 @@ class Worksheet(object):
             }]
         }
 
-        return self.spreadsheet.batch_update(body)
+        return await self.spreadsheet.batch_update(body)
 
-    def update_title(self, title):
+    async def update_title(self, title):
         """Renames the worksheet.
 
         :param title: A new title.
@@ -847,29 +839,29 @@ class Worksheet(object):
             }]
         }
 
-        response = self.spreadsheet.batch_update(body)
+        response = await self.spreadsheet.batch_update(body)
         self._properties['title'] = title
         return response
 
-    def add_rows(self, rows):
+    async def add_rows(self, rows):
         """Adds rows to worksheet.
 
         :param rows: Number of new rows to add.
         :type rows: int
 
         """
-        self.resize(rows=self.row_count + rows)
+        await self.resize(rows=self.row_count + rows)
 
-    def add_cols(self, cols):
+    async def add_cols(self, cols):
         """Adds colums to worksheet.
 
         :param cols: Number of new columns to add.
         :type cols: int
 
         """
-        self.resize(cols=self.col_count + cols)
+        await self.resize(cols=self.col_count + cols)
 
-    def append_row(self, values, value_input_option='RAW'):
+    async def append_row(self, values, value_input_option='RAW'):
         """Adds a row to the worksheet and populates it with values.
         Widens the worksheet if there are more values than columns.
 
@@ -890,9 +882,9 @@ class Worksheet(object):
             'values': [values]
         }
 
-        return self.spreadsheet.values_append(self.title, params, body)
+        return await self.spreadsheet.values_append(self.title, params, body)
 
-    def insert_row(
+    async def insert_row(
         self,
         values,
         index=1,
@@ -928,11 +920,11 @@ class Worksheet(object):
             }]
         }
 
-        self.spreadsheet.batch_update(body)
+        await self.spreadsheet.batch_update(body)
 
         range_label = '%s!%s' % (self.title, 'A%s' % index)
 
-        data = self.spreadsheet.values_update(
+        data = await self.spreadsheet.values_update(
             range_label,
             params={
                 'valueInputOption': value_input_option
@@ -944,7 +936,7 @@ class Worksheet(object):
 
         return data
 
-    def delete_row(self, index):
+    async def delete_row(self, index):
         """"Deletes the row from the worksheet at the specified index.
 
         :param index: Index of a row for deletion.
@@ -963,15 +955,15 @@ class Worksheet(object):
             }]
         }
 
-        return self.spreadsheet.batch_update(body)
+        return await self.spreadsheet.batch_update(body)
 
-    def clear(self):
+    async def clear(self):
         """Clears all cells in the worksheet.
         """
-        return self.spreadsheet.values_clear(self.title)
+        return await self.spreadsheet.values_clear(self.title)
 
-    def _finder(self, func, query):
-        data = self.spreadsheet.values_get(self.title)
+    async def _finder(self, func, query):
+        data = await self.spreadsheet.values_get(self.title)
 
         try:
             values = fill_gaps(data['values'])
@@ -991,7 +983,7 @@ class Worksheet(object):
 
         return func(match, cells)
 
-    def find(self, query):
+    async def find(self, query):
         """Finds the first cell matching the query.
 
         :param query: A literal string to match or compiled regular expression.
@@ -999,18 +991,18 @@ class Worksheet(object):
 
         """
         try:
-            return self._finder(finditem, query)
+            return await self._finder(finditem, query)
         except StopIteration:
             raise CellNotFound(query)
 
-    def findall(self, query):
+    async def findall(self, query):
         """Finds all cells matching the query.
 
         :param query: A literal string to match or compiled regular expression.
         :type query: str, :py:class:`re.RegexObject`
 
         """
-        return list(self._finder(filter, query))
+        return list(await self._finder(filter, query))
 
     def export(self, format):
         """.. deprecated:: 2.0
@@ -1025,7 +1017,7 @@ class Worksheet(object):
             stacklevel=2
         )
 
-    def duplicate(
+    async def duplicate(
         self,
         insert_sheet_index=None,
         new_sheet_id=None,
@@ -1049,7 +1041,7 @@ class Worksheet(object):
         .. versionadded:: 3.1.0
 
         """
-        return self.spreadsheet.duplicate_sheet(
+        return await self.spreadsheet.duplicate_sheet(
             self.id,
             insert_sheet_index,
             new_sheet_id,
